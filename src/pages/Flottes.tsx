@@ -22,7 +22,7 @@ export default function Flottes() {
   const [responsables, setResponsables] = useState<Profile[]>([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Flotte | null>(null);
-  const [form, setForm] = useState({ nom: "", type_transport: TYPES_TRANSPORT[0], responsable: "none" });
+  const [form, setForm] = useState<{ nom: string; type_transport: string; responsable: string }>({ nom: "", type_transport: TYPES_TRANSPORT[0], responsable: "none" });
 
   const load = async () => {
     const [{ data: f }, { data: p }] = await Promise.all([

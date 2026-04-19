@@ -19,7 +19,7 @@ export default function Incidents() {
   const [items, setItems] = useState<any[]>([]);
   const [missions, setMissions] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ mission_id: "", type_incident: TYPES_INCIDENT[0], description: "", gravite: "mineur" });
+  const [form, setForm] = useState<{ mission_id: string; type_incident: string; description: string; gravite: string }>({ mission_id: "", type_incident: TYPES_INCIDENT[0], description: "", gravite: "mineur" });
 
   const load = async () => {
     const [{ data: i }, { data: m }] = await Promise.all([

@@ -20,7 +20,7 @@ export default function Vehicules() {
   const [flottes, setFlottes] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<{ immatriculation: string; type_vehicule: string; capacite_tonnage: string; capacite_volume: string; statut: string; flotte_id: string; consommation_moyenne: string; km_total: string }>({
     immatriculation: "", type_vehicule: TYPES_VEHICULE[0], capacite_tonnage: "10", capacite_volume: "30",
     statut: "disponible", flotte_id: "none", consommation_moyenne: "30", km_total: "0",
   });

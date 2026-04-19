@@ -23,7 +23,7 @@ export default function MisesADisposition() {
   const [vehiculesDispo, setVehiculesDispo] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<{ planification_id: string; type_prestation: string; prestataire_id: string; date_debut_prevue: string; date_fin_prevue: string; type_vehicule_requis: string; nb_vehicules: string; region_destination: string; cout_estime: string; commentaire: string }>({
     planification_id: "none", type_prestation: "interne", prestataire_id: "none",
     date_debut_prevue: "", date_fin_prevue: "",
     type_vehicule_requis: TYPES_VEHICULE[0], nb_vehicules: "1",
