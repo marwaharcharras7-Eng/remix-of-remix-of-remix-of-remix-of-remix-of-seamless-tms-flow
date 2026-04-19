@@ -29,6 +29,64 @@ export const VEHICULE_STATUTS = ['disponible','affecte','en_mission','maintenanc
 export const MISSION_STATUTS = ['creee','affectee','en_cours','livree','facturee','cloturee','annulee'] as const;
 export const MAD_STATUTS = ['creee','validee','affectee','en_cours','terminee','annulee'] as const;
 
+// ===== Listes déroulantes (référentiels) =====
+export const TYPES_TRANSPORT = [
+  'Routier longue distance',
+  'Routier régional',
+  'Distribution urbaine',
+  'Frigorifique',
+  'Citerne / Vrac liquide',
+  'Benne / Vrac solide',
+  'Conteneur',
+  'Maritime',
+  'Multimodal',
+] as const;
+
+export const TYPES_VEHICULE = [
+  'Camion 19T',
+  'Camion 26T',
+  'Tracteur + Semi-remorque',
+  'Porteur 12T',
+  'Camionnette 3.5T',
+  'Fourgon',
+  'Frigorifique',
+  'Citerne',
+  'Benne',
+  'Plateau',
+  'Porte-conteneur',
+] as const;
+
+export const TYPES_INCIDENT = [
+  'Retard livraison',
+  'Panne mécanique',
+  'Accident',
+  'Vol / Disparition',
+  'Marchandise endommagée',
+  'Écart de poids',
+  'Refus de livraison',
+  'Document manquant',
+  'Problème client',
+  'Conditions météo',
+  'Itinéraire bloqué',
+  'Autre',
+] as const;
+
+// 12 régions administratives du Maroc
+export const REGIONS_MAROC = [
+  'Tanger-Tétouan-Al Hoceïma',
+  'Oriental',
+  'Fès-Meknès',
+  'Rabat-Salé-Kénitra',
+  'Béni Mellal-Khénifra',
+  'Casablanca-Settat',
+  'Marrakech-Safi',
+  'Drâa-Tafilalet',
+  'Souss-Massa',
+  'Guelmim-Oued Noun',
+  'Laâyoune-Sakia El Hamra',
+  'Dakhla-Oued Ed-Dahab',
+] as const;
+
 export const STATUT_LABELS: Record<string, string> = {
   disponible: 'Disponible',
   affecte: 'Affecté',
