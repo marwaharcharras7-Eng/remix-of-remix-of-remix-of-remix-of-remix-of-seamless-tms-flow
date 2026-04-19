@@ -4,7 +4,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { PageHeader } from "@/components/layout/AppLayout";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Card } from "@/components/ui/card";
 import { Plus, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
+import { TYPES_INCIDENT } from "@/lib/tms-types";
 
 export default function Incidents() {
   const { hasRole, user } = useAuth();
@@ -19,7 +19,7 @@ export default function Incidents() {
   const [items, setItems] = useState<any[]>([]);
   const [missions, setMissions] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ mission_id: "", type_incident: "Retard", description: "", gravite: "mineur" });
+  const [form, setForm] = useState({ mission_id: "", type_incident: TYPES_INCIDENT[0], description: "", gravite: "mineur" });
 
   const load = async () => {
     const [{ data: i }, { data: m }] = await Promise.all([
@@ -41,14 +41,16 @@ export default function Incidents() {
     });
     if (error) return toast.error(error.message);
     if (form.gravite === "majeur" || form.gravite === "critique") await supabase.from("missions").update({ litige: true }).eq("id", form.mission_id);
-    toast.success("Incident déclaré"); setOpen(false);
-    setForm({ mission_id: "", type_incident: "Retard", description: "", gravite: "mineur" });
+    toast.success("✅ Incident déclaré avec succès");
+    setOpen(false);
+    setForm({ mission_id: "", type_incident: TYPES_INCIDENT[0], description: "", gravite: "mineur" });
     load();
   };
 
   const resoudre = async (i: any) => {
-    await supabase.from("incidents").update({ resolu: true }).eq("id", i.id);
-    toast.success("Résolu"); load();
+    const { error } = await supabase.from("incidents").update({ resolu: true }).eq("id", i.id);
+    if (error) return toast.error(error.message);
+    toast.success("✅ Incident marqué comme résolu"); load();
   };
 
   return (
@@ -93,7 +95,14 @@ export default function Incidents() {
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5"><Label>Type</Label><Input value={form.type_incident} onChange={(e) => setForm({ ...form, type_incident: e.target.value })} /></div>
+              <div className="space-y-1.5"><Label>Type d'incident *</Label>
+                <Select value={form.type_incident} onValueChange={(v) => setForm({ ...form, type_incident: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {TYPES_INCIDENT.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-1.5"><Label>Gravité</Label>
                 <Select value={form.gravite} onValueChange={(v) => setForm({ ...form, gravite: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>

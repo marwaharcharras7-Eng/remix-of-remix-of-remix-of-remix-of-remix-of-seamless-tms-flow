@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Card } from "@/components/ui/card";
-import { Plus, Scale } from "lucide-react";
+import { Plus, Scale, Info, ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 import { toast } from "sonner";
 
 export default function PontBascule() {
@@ -37,10 +37,9 @@ export default function PontBascule() {
       operateur: user?.id,
     });
     if (error) return toast.error(error.message);
-    // Sync mission poids
     if (form.type_pesee === "chargement") await supabase.from("missions").update({ poids_charge: Number(form.poids_mesure) }).eq("id", form.mission_id);
     else await supabase.from("missions").update({ poids_livre: Number(form.poids_mesure) }).eq("id", form.mission_id);
-    toast.success("Pesée enregistrée");
+    toast.success(`✅ Pesée de ${form.type_pesee} enregistrée avec succès`);
     setOpen(false); setForm({ mission_id: "", type_pesee: "chargement", poids_mesure: "", poids_theorique: "" });
     load();
   };
@@ -48,7 +47,41 @@ export default function PontBascule() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader title="Pont bascule" description="P4 — Pesée chargement / livraison" actions={<Button onClick={() => setOpen(true)}><Plus className="mr-2 h-4 w-4" />Nouvelle pesée</Button>} />
-      <div className="flex-1 p-6">
+      <div className="flex-1 space-y-6 p-6">
+        {/* Bandeau explicatif */}
+        <Card className="border-info/30 bg-info/5 p-4">
+          <div className="flex gap-3">
+            <Info className="mt-0.5 h-5 w-5 shrink-0 text-info" />
+            <div className="space-y-2 text-sm">
+              <p className="font-semibold text-info">Logique de la pesée : chargement vs livraison</p>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-md border border-border bg-card p-3">
+                  <div className="mb-1 flex items-center gap-2 font-medium">
+                    <ArrowUpFromLine className="h-4 w-4 text-accent" />
+                    <span>Chargement (départ)</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Pesée effectuée au <strong>dépôt</strong> avant départ. Détermine le tonnage
+                    réellement embarqué par le véhicule. Met à jour <code className="rounded bg-muted px-1">missions.poids_charge</code>.
+                    Sert de référence pour : facturation, calcul du taux de remplissage, contrôle de surcharge.
+                  </p>
+                </div>
+                <div className="rounded-md border border-border bg-card p-3">
+                  <div className="mb-1 flex items-center gap-2 font-medium">
+                    <ArrowDownToLine className="h-4 w-4 text-success" />
+                    <span>Livraison (arrivée)</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Pesée effectuée chez le <strong>client</strong>. Compare poids livré vs poids chargé.
+                    Met à jour <code className="rounded bg-muted px-1">missions.poids_livre</code>.
+                    L'<strong>écart</strong> (chargement − livraison) déclenche un litige automatique si supérieur à 1t.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Card>
+
         <Card>
           <table className="w-full text-sm data-table">
             <thead><tr className="border-b border-border">
@@ -64,7 +97,14 @@ export default function PontBascule() {
                   <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(p.date_mesure).toLocaleString("fr-FR")}</td>
                   <td className="px-4 py-3 font-mono text-xs">{p.missions?.reference || "—"}</td>
                   <td className="px-4 py-3 font-mono text-xs">{p.vehicules?.immatriculation || "—"}</td>
-                  <td className="px-4 py-3 capitalize">{p.type_pesee}</td>
+                  <td className="px-4 py-3 capitalize">
+                    <span className="inline-flex items-center gap-1">
+                      {p.type_pesee === "chargement"
+                        ? <ArrowUpFromLine className="h-3 w-3 text-accent" />
+                        : <ArrowDownToLine className="h-3 w-3 text-success" />}
+                      {p.type_pesee}
+                    </span>
+                  </td>
                   <td className="px-4 py-3 text-right tabular-nums font-medium">{Number(p.poids_mesure).toFixed(2)} t</td>
                   <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{p.poids_theorique ? `${Number(p.poids_theorique).toFixed(2)} t` : "—"}</td>
                   <td className={`px-4 py-3 text-right tabular-nums ${Math.abs(Number(p.ecart || 0)) > 1 ? "text-warning font-semibold" : ""}`}>{p.ecart != null ? `${Number(p.ecart).toFixed(2)} t` : "—"}</td>
@@ -85,11 +125,19 @@ export default function PontBascule() {
                 <SelectContent>{missions.map((m) => <SelectItem key={m.id} value={m.id}>{m.reference} → {m.destination}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5"><Label>Type *</Label>
+            <div className="space-y-1.5"><Label>Type de pesée *</Label>
               <Select value={form.type_pesee} onValueChange={(v) => setForm({ ...form, type_pesee: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="chargement">Chargement</SelectItem><SelectItem value="livraison">Livraison</SelectItem></SelectContent>
+                <SelectContent>
+                  <SelectItem value="chargement">Chargement (au dépôt, départ)</SelectItem>
+                  <SelectItem value="livraison">Livraison (chez le client, arrivée)</SelectItem>
+                </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                {form.type_pesee === "chargement"
+                  ? "→ Met à jour le poids chargé dans la mission. Sert de référence facturation."
+                  : "→ Met à jour le poids livré. L'écart avec le chargement déclenche un contrôle litige."}
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5"><Label>Poids mesuré (t) *</Label><Input type="number" step="0.01" value={form.poids_mesure} onChange={(e) => setForm({ ...form, poids_mesure: e.target.value })} required /></div>
