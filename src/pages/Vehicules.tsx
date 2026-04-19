@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Card } from "@/components/ui/card";
 import { Plus, Pencil, Trash2, Truck } from "lucide-react";
 import { toast } from "sonner";
-import { VEHICULE_STATUTS, STATUT_LABELS } from "@/lib/tms-types";
+import { VEHICULE_STATUTS, STATUT_LABELS, TYPES_VEHICULE } from "@/lib/tms-types";
 
 export default function Vehicules() {
   const { hasRole } = useAuth();
@@ -20,8 +20,8 @@ export default function Vehicules() {
   const [flottes, setFlottes] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
-  const [form, setForm] = useState({
-    immatriculation: "", type_vehicule: "Camion", capacite_tonnage: "10", capacite_volume: "30",
+  const [form, setForm] = useState<{ immatriculation: string; type_vehicule: string; capacite_tonnage: string; capacite_volume: string; statut: string; flotte_id: string; consommation_moyenne: string; km_total: string }>({
+    immatriculation: "", type_vehicule: TYPES_VEHICULE[0], capacite_tonnage: "10", capacite_volume: "30",
     statut: "disponible", flotte_id: "none", consommation_moyenne: "30", km_total: "0",
   });
 
@@ -36,13 +36,14 @@ export default function Vehicules() {
 
   const openNew = () => {
     setEditing(null);
-    setForm({ immatriculation: "", type_vehicule: "Camion", capacite_tonnage: "10", capacite_volume: "30", statut: "disponible", flotte_id: "none", consommation_moyenne: "30", km_total: "0" });
+    setForm({ immatriculation: "", type_vehicule: TYPES_VEHICULE[0], capacite_tonnage: "10", capacite_volume: "30", statut: "disponible", flotte_id: "none", consommation_moyenne: "30", km_total: "0" });
     setOpen(true);
   };
   const openEdit = (v: any) => {
     setEditing(v);
     setForm({
-      immatriculation: v.immatriculation, type_vehicule: v.type_vehicule,
+      immatriculation: v.immatriculation,
+      type_vehicule: TYPES_VEHICULE.includes(v.type_vehicule) ? v.type_vehicule : TYPES_VEHICULE[0],
       capacite_tonnage: String(v.capacite_tonnage), capacite_volume: String(v.capacite_volume),
       statut: v.statut, flotte_id: v.flotte_id || "none",
       consommation_moyenne: String(v.consommation_moyenne), km_total: String(v.km_total),
@@ -66,7 +67,7 @@ export default function Vehicules() {
       ? await supabase.from("vehicules").update(payload).eq("id", editing.id)
       : await supabase.from("vehicules").insert(payload);
     if (error) return toast.error(error.message);
-    toast.success(editing ? "Véhicule mis à jour" : "Véhicule créé");
+    toast.success(editing ? "✅ Véhicule mis à jour avec succès" : "✅ Véhicule créé avec succès");
     setOpen(false); load();
   };
 
@@ -74,7 +75,7 @@ export default function Vehicules() {
     if (!confirm("Supprimer ce véhicule ?")) return;
     const { error } = await supabase.from("vehicules").delete().eq("id", id);
     if (error) return toast.error(error.message);
-    toast.success("Supprimé"); load();
+    toast.success("✅ Véhicule supprimé"); load();
   };
 
   return (
@@ -129,7 +130,15 @@ export default function Vehicules() {
           <form onSubmit={save} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5"><Label>Immatriculation *</Label><Input value={form.immatriculation} onChange={(e) => setForm({ ...form, immatriculation: e.target.value })} required /></div>
-              <div className="space-y-1.5"><Label>Type *</Label><Input value={form.type_vehicule} onChange={(e) => setForm({ ...form, type_vehicule: e.target.value })} required /></div>
+              <div className="space-y-1.5">
+                <Label>Type *</Label>
+                <Select value={form.type_vehicule} onValueChange={(v) => setForm({ ...form, type_vehicule: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {TYPES_VEHICULE.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5"><Label>Tonnage (t)</Label><Input type="number" step="0.1" value={form.capacite_tonnage} onChange={(e) => setForm({ ...form, capacite_tonnage: e.target.value })} /></div>

@@ -10,9 +10,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Card } from "@/components/ui/card";
-import { Plus, Send, Sparkles, Pencil } from "lucide-react";
+import { Plus, Send, Sparkles, Pencil, Info } from "lucide-react";
 import { toast } from "sonner";
-import { generateRef } from "@/lib/tms-types";
+import { generateRef, TYPES_VEHICULE, REGIONS_MAROC } from "@/lib/tms-types";
 
 export default function MisesADisposition() {
   const { hasRole, user } = useAuth();
@@ -20,22 +20,25 @@ export default function MisesADisposition() {
   const [items, setItems] = useState<any[]>([]);
   const [plannings, setPlannings] = useState<any[]>([]);
   const [prestataires, setPrestataires] = useState<any[]>([]);
+  const [vehiculesDispo, setVehiculesDispo] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<{ planification_id: string; type_prestation: string; prestataire_id: string; date_debut_prevue: string; date_fin_prevue: string; type_vehicule_requis: string; nb_vehicules: string; region_destination: string; cout_estime: string; commentaire: string }>({
     planification_id: "none", type_prestation: "interne", prestataire_id: "none",
     date_debut_prevue: "", date_fin_prevue: "",
-    type_vehicule_requis: "Camion", nb_vehicules: "1", region_destination: "",
+    type_vehicule_requis: TYPES_VEHICULE[0], nb_vehicules: "1",
+    region_destination: REGIONS_MAROC[0],
     cout_estime: "0", commentaire: "",
   });
 
   const load = async () => {
-    const [{ data: m }, { data: pl }, { data: pr }] = await Promise.all([
+    const [{ data: m }, { data: pl }, { data: pr }, { data: vh }] = await Promise.all([
       supabase.from("mises_a_disposition").select("*, planifications(reference), prestataires(nom)").order("created_at", { ascending: false }),
       supabase.from("planifications").select("id, reference").eq("statut", "valide"),
       supabase.from("prestataires").select("id, nom"),
+      supabase.from("vehicules").select("id, immatriculation, type_vehicule, flotte_id, statut").eq("statut", "disponible"),
     ]);
-    setItems(m || []); setPlannings(pl || []); setPrestataires(pr || []);
+    setItems(m || []); setPlannings(pl || []); setPrestataires(pr || []); setVehiculesDispo(vh || []);
   };
   useEffect(() => { load(); }, []);
 
@@ -45,7 +48,8 @@ export default function MisesADisposition() {
     setForm({
       planification_id: "none", type_prestation: "interne", prestataire_id: "none",
       date_debut_prevue: now.toISOString().slice(0, 16), date_fin_prevue: tom.toISOString().slice(0, 16),
-      type_vehicule_requis: "Camion", nb_vehicules: "1", region_destination: "",
+      type_vehicule_requis: TYPES_VEHICULE[0], nb_vehicules: "1",
+      region_destination: REGIONS_MAROC[0],
       cout_estime: "0", commentaire: "",
     });
     setOpen(true);
@@ -56,8 +60,10 @@ export default function MisesADisposition() {
       planification_id: m.planification_id || "none", type_prestation: m.type_prestation,
       prestataire_id: m.prestataire_id || "none",
       date_debut_prevue: m.date_debut_prevue.slice(0, 16), date_fin_prevue: m.date_fin_prevue.slice(0, 16),
-      type_vehicule_requis: m.type_vehicule_requis, nb_vehicules: String(m.nb_vehicules),
-      region_destination: m.region_destination, cout_estime: String(m.cout_estime), commentaire: m.commentaire || "",
+      type_vehicule_requis: TYPES_VEHICULE.includes(m.type_vehicule_requis) ? m.type_vehicule_requis : TYPES_VEHICULE[0],
+      nb_vehicules: String(m.nb_vehicules),
+      region_destination: REGIONS_MAROC.includes(m.region_destination as any) ? m.region_destination : REGIONS_MAROC[0],
+      cout_estime: String(m.cout_estime), commentaire: m.commentaire || "",
     });
     setOpen(true);
   };
@@ -81,28 +87,58 @@ export default function MisesADisposition() {
       ? await supabase.from("mises_a_disposition").update(payload).eq("id", editing.id)
       : await supabase.from("mises_a_disposition").insert(payload);
     if (error) return toast.error(error.message);
-    toast.success(editing ? "MAD mise à jour" : "MAD créée"); setOpen(false); load();
+    toast.success(editing ? "✅ MAD mise à jour avec succès" : "✅ MAD créée avec succès");
+    setOpen(false); load();
   };
 
-  // P3 : génération automatique des missions depuis la MAD
+  // P3 — Génération auto des missions avec cohérence flotte/disponibilité
   const genererMissions = async (m: any) => {
-    if (!confirm(`Générer ${m.nb_vehicules} mission(s) depuis cette MAD et l'affecter aux véhicules disponibles ?`)) return;
+    if (!confirm(`Générer ${m.nb_vehicules} mission(s) depuis cette MAD ?\n\nL'affectation respectera : type véhicule requis, flotte du véhicule = flotte du chauffeur, et disponibilité réelle.`)) return;
 
-    // Récupérer véhicules dispo + chauffeurs dispo
-    const { data: vehs } = await supabase.from("vehicules").select("id").eq("statut", "disponible").limit(m.nb_vehicules);
-    const { data: chauffs } = await supabase.from("chauffeurs").select("id").eq("disponibilite", true).limit(m.nb_vehicules);
+    // 1) Sélectionner véhicules dispo qui correspondent au type requis
+    const { data: vehs } = await supabase
+      .from("vehicules")
+      .select("id, type_vehicule, flotte_id")
+      .eq("statut", "disponible")
+      .eq("type_vehicule", m.type_vehicule_requis)
+      .limit(m.nb_vehicules);
 
-    if (!vehs || vehs.length === 0) { toast.error("Aucun véhicule disponible. Vérifiez le module Véhicules."); return; }
-    const nbToCreate = Math.min(vehs.length, chauffs?.length || 0, m.nb_vehicules);
-    if (nbToCreate === 0) { toast.error("Aucun chauffeur disponible."); return; }
+    if (!vehs || vehs.length === 0) {
+      toast.error(`Aucun véhicule disponible de type "${m.type_vehicule_requis}". Vérifiez le module Véhicules.`);
+      return;
+    }
 
-    const missionsToInsert = [];
-    for (let i = 0; i < nbToCreate; i++) {
+    // 2) Pour chaque véhicule, chercher un chauffeur dispo de la même flotte
+    const missionsToInsert: any[] = [];
+    const vehiculesUtilises: string[] = [];
+    const chauffeursUtilises: string[] = [];
+    const skipChauffeurIds = new Set<string>();
+
+    for (const v of vehs) {
+      let chauffeurQuery = supabase
+        .from("chauffeurs")
+        .select("id, flotte_id, prenom, nom")
+        .eq("disponibilite", true);
+
+      // Cohérence flotte : si le véhicule a une flotte, exiger un chauffeur de cette flotte
+      if (v.flotte_id) {
+        chauffeurQuery = chauffeurQuery.eq("flotte_id", v.flotte_id);
+      }
+
+      const { data: chauffsDispo } = await chauffeurQuery;
+      const chauffeurLibre = (chauffsDispo || []).find((c) => !skipChauffeurIds.has(c.id));
+
+      if (!chauffeurLibre) continue; // Pas de chauffeur compatible : on saute ce véhicule
+
+      skipChauffeurIds.add(chauffeurLibre.id);
+      vehiculesUtilises.push(v.id);
+      chauffeursUtilises.push(chauffeurLibre.id);
+
       missionsToInsert.push({
         reference: generateRef("MIS"),
         mise_a_disposition_id: m.id,
-        vehicule_id: vehs[i].id,
-        chauffeur_id: chauffs![i].id,
+        vehicule_id: v.id,
+        chauffeur_id: chauffeurLibre.id,
         prestataire_id: m.prestataire_id,
         type_prestation: m.type_prestation,
         origine: "Dépôt principal",
@@ -114,17 +150,24 @@ export default function MisesADisposition() {
       });
     }
 
+    if (missionsToInsert.length === 0) {
+      toast.error("Aucun couple véhicule + chauffeur compatible trouvé (vérifiez les flottes & disponibilités).");
+      return;
+    }
+
     const { error: errMis } = await supabase.from("missions").insert(missionsToInsert);
     if (errMis) return toast.error(errMis.message);
 
-    // Mettre à jour véhicules & chauffeurs en "affecté"
-    await supabase.from("vehicules").update({ statut: "affecte" }).in("id", vehs.slice(0, nbToCreate).map((v) => v.id));
-    await supabase.from("chauffeurs").update({ disponibilite: false }).in("id", chauffs!.slice(0, nbToCreate).map((c) => c.id));
+    await supabase.from("vehicules").update({ statut: "affecte" }).in("id", vehiculesUtilises);
+    await supabase.from("chauffeurs").update({ disponibilite: false }).in("id", chauffeursUtilises);
     await supabase.from("mises_a_disposition").update({ statut: "affectee" }).eq("id", m.id);
 
-    toast.success(`${nbToCreate} mission(s) créée(s) et affectée(s) automatiquement`);
+    toast.success(`✅ ${missionsToInsert.length} mission(s) créée(s) avec affectation cohérente flotte/dispo`);
     load();
   };
+
+  // Véhicules disponibles filtrés par type sélectionné (pour info/aperçu)
+  const vehiculesCompatibles = vehiculesDispo.filter((v) => v.type_vehicule === form.type_vehicule_requis);
 
   return (
     <div className="flex h-full flex-col">
@@ -196,14 +239,40 @@ export default function MisesADisposition() {
               <div className="space-y-1.5"><Label>Fin prévue *</Label><Input type="datetime-local" value={form.date_fin_prevue} onChange={(e) => setForm({ ...form, date_fin_prevue: e.target.value })} required /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5"><Label>Type véhicule *</Label><Input value={form.type_vehicule_requis} onChange={(e) => setForm({ ...form, type_vehicule_requis: e.target.value })} required /></div>
+              <div className="space-y-1.5">
+                <Label>Type véhicule requis *</Label>
+                <Select value={form.type_vehicule_requis} onValueChange={(v) => setForm({ ...form, type_vehicule_requis: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {TYPES_VEHICULE.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {vehiculesCompatibles.length} véhicule(s) disponible(s) de ce type
+                </p>
+              </div>
               <div className="space-y-1.5"><Label>Nb véhicules *</Label><Input type="number" min="1" value={form.nb_vehicules} onChange={(e) => setForm({ ...form, nb_vehicules: e.target.value })} required /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5"><Label>Région destination *</Label><Input value={form.region_destination} onChange={(e) => setForm({ ...form, region_destination: e.target.value })} required /></div>
+              <div className="space-y-1.5">
+                <Label>Région destination *</Label>
+                <Select value={form.region_destination} onValueChange={(v) => setForm({ ...form, region_destination: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {REGIONS_MAROC.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-1.5"><Label>Coût estimé (MAD)</Label><Input type="number" step="0.01" value={form.cout_estime} onChange={(e) => setForm({ ...form, cout_estime: e.target.value })} /></div>
             </div>
             <div className="space-y-1.5"><Label>Commentaire</Label><Textarea rows={2} value={form.commentaire} onChange={(e) => setForm({ ...form, commentaire: e.target.value })} /></div>
+            <div className="flex gap-2 rounded-md border border-info/30 bg-info/5 p-3 text-xs">
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-info" />
+              <p>
+                Les véhicules spécifiques seront sélectionnés <strong>automatiquement</strong> par
+                "Générer missions" en respectant : type requis, flotte du véhicule = flotte du chauffeur, et disponibilité.
+              </p>
+            </div>
             <DialogFooter><Button type="submit">{editing ? "Mettre à jour" : "Créer"}</Button></DialogFooter>
           </form>
         </DialogContent>
