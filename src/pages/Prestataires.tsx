@@ -12,7 +12,7 @@ import { toast } from "sonner";
 
 export default function Prestataires() {
   const { hasRole } = useAuth();
-  const canEdit = hasRole("plant_manager") || hasRole("planificateur");
+  const canEdit = hasRole("plant_manager") || hasRole("manager_logistique");
   const [items, setItems] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
