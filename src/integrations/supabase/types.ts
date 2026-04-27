@@ -601,6 +601,35 @@ export type Database = {
         }
         Relationships: []
       }
+      responsable_flotte_flottes: {
+        Row: {
+          created_at: string
+          flotte_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          flotte_id: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          flotte_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "responsable_flotte_flottes_flotte_id_fkey"
+            columns: ["flotte_id"]
+            isOneToOne: false
+            referencedRelation: "flottes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -707,14 +736,16 @@ export type Database = {
         }
         Returns: boolean
       }
+      user_flotte_ids: { Args: { _user_id: string }; Returns: string[] }
     }
     Enums: {
       app_role:
-        | "administrateur"
+        | "admin_it"
+        | "plant_manager"
+        | "manager_logistique"
+        | "responsable_flotte"
         | "planificateur"
         | "chauffeur"
-        | "comptable"
-        | "direction"
       facture_statut: "brouillon" | "validee" | "envoyee" | "payee" | "annulee"
       incident_gravite: "mineur" | "majeur" | "critique"
       mad_statut:
@@ -867,11 +898,12 @@ export const Constants = {
   public: {
     Enums: {
       app_role: [
-        "administrateur",
+        "admin_it",
+        "plant_manager",
+        "manager_logistique",
+        "responsable_flotte",
         "planificateur",
         "chauffeur",
-        "comptable",
-        "direction",
       ],
       facture_statut: ["brouillon", "validee", "envoyee", "payee", "annulee"],
       incident_gravite: ["mineur", "majeur", "critique"],
