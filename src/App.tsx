@@ -53,7 +53,7 @@ const App = () => (
               <Route path="/factures" element={<RoleGuard module="factures"><Factures /></RoleGuard>} />
               <Route path="/incidents" element={<RoleGuard module="incidents"><Incidents /></RoleGuard>} />
               <Route path="/reporting" element={<RoleGuard module="reporting"><Reporting /></RoleGuard>} />
-              <Route path="/utilisateurs" element={<RoleGuard allow={["plant_manager"]}><Utilisateurs /></RoleGuard>} />
+              <Route path="/utilisateurs" element={<RoleGuard allow={["admin_it","plant_manager","manager_logistique"]}><Utilisateurs /></RoleGuard>} />
             </Route>
 
             <Route path="*" element={<NotFound />} />
