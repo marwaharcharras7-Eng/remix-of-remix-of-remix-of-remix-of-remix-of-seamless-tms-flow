@@ -15,7 +15,7 @@ import { VEHICULE_STATUTS, STATUT_LABELS, TYPES_VEHICULE } from "@/lib/tms-types
 
 export default function Vehicules() {
   const { hasRole } = useAuth();
-  const canEdit = hasRole("plant_manager") || hasRole("planificateur");
+  const canEdit = hasRole("plant_manager") || hasRole("manager_logistique");
   const [items, setItems] = useState<any[]>([]);
   const [flottes, setFlottes] = useState<any[]>([]);
   const [open, setOpen] = useState(false);

@@ -14,7 +14,7 @@ import { toast } from "sonner";
 
 export default function Chauffeurs() {
   const { hasRole } = useAuth();
-  const canEdit = hasRole("plant_manager") || hasRole("planificateur");
+  const canEdit = hasRole("manager_logistique") || hasRole("responsable_flotte");
   const [items, setItems] = useState<any[]>([]);
   const [flottes, setFlottes] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
