@@ -5,13 +5,21 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// 6 comptes de démo (un par rôle) + 5 vrais responsables de flotte avec noms/prénoms réalistes
 const DEMO_USERS = [
-  { email: "admin@tms.demo",       password: "Demo1234!", nom: "Admin IT",        prenom: "Demo", role: "admin_it" },
-  { email: "plant@tms.demo",       password: "Demo1234!", nom: "Plant Manager",   prenom: "Demo", role: "plant_manager" },
-  { email: "logistique@tms.demo",  password: "Demo1234!", nom: "Manager Log.",    prenom: "Demo", role: "manager_logistique" },
-  { email: "respflotte@tms.demo",  password: "Demo1234!", nom: "Resp. Flotte",    prenom: "Demo", role: "responsable_flotte" },
-  { email: "planif@tms.demo",      password: "Demo1234!", nom: "Planificateur",   prenom: "Demo", role: "planificateur" },
-  { email: "chauffeur@tms.demo",   password: "Demo1234!", nom: "Chauffeur",       prenom: "Demo", role: "chauffeur" },
+  { email: "admin@tms.demo",       password: "Demo1234!", nom: "El Amrani",   prenom: "Karim",    role: "admin_it" },
+  { email: "plant@tms.demo",       password: "Demo1234!", nom: "Bennani",     prenom: "Hassan",   role: "plant_manager" },
+  { email: "logistique@tms.demo",  password: "Demo1234!", nom: "Tazi",        prenom: "Salma",    role: "manager_logistique" },
+  { email: "respflotte@tms.demo",  password: "Demo1234!", nom: "Alaoui",      prenom: "Youssef",  role: "responsable_flotte" },
+  { email: "planif@tms.demo",      password: "Demo1234!", nom: "Chraibi",     prenom: "Nadia",    role: "planificateur" },
+  { email: "chauffeur@tms.demo",   password: "Demo1234!", nom: "Berrada",     prenom: "Omar",     role: "chauffeur" },
+
+  // Responsables de flotte additionnels (noms / prénoms réalistes pour la liste de sélection)
+  { email: "rf.benjelloun@tms.demo", password: "Demo1234!", nom: "Benjelloun", prenom: "Mehdi",    role: "responsable_flotte", autoAssignAll: false },
+  { email: "rf.idrissi@tms.demo",    password: "Demo1234!", nom: "Idrissi",    prenom: "Fatima",   role: "responsable_flotte", autoAssignAll: false },
+  { email: "rf.fassi@tms.demo",      password: "Demo1234!", nom: "Fassi",      prenom: "Reda",     role: "responsable_flotte", autoAssignAll: false },
+  { email: "rf.cherkaoui@tms.demo",  password: "Demo1234!", nom: "Cherkaoui",  prenom: "Sanaa",    role: "responsable_flotte", autoAssignAll: false },
+  { email: "rf.ouazzani@tms.demo",   password: "Demo1234!", nom: "Ouazzani",   prenom: "Anas",     role: "responsable_flotte", autoAssignAll: false },
 ];
 
 Deno.serve(async (req) => {
@@ -56,8 +64,9 @@ Deno.serve(async (req) => {
       await admin.from("user_roles").delete().eq("user_id", userId);
       const { error: roleErr } = await admin.from("user_roles").insert({ user_id: userId, role: u.role });
 
-      // Si responsable_flotte : assigner toutes les flottes existantes (pour la démo)
-      if (u.role === "responsable_flotte") {
+      // Le compte démo "respflotte@tms.demo" reçoit toutes les flottes pour la démo
+      // Les autres responsables de flotte sont créés "vides" (à assigner manuellement par l'admin)
+      if (u.role === "responsable_flotte" && (u as any).autoAssignAll !== false) {
         await admin.from("responsable_flotte_flottes").delete().eq("user_id", userId);
         const { data: flottes } = await admin.from("flottes").select("id");
         if (flottes && flottes.length > 0) {
@@ -71,6 +80,7 @@ Deno.serve(async (req) => {
         email: u.email,
         password: u.password,
         role: u.role,
+        nom: `${u.prenom} ${u.nom}`,
         status: roleErr ? `${status}/role-error` : status,
         error: roleErr?.message,
       });
