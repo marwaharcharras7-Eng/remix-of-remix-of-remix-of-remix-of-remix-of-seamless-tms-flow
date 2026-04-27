@@ -25,11 +25,11 @@ export default function Flottes() {
   const [form, setForm] = useState<{ nom: string; type_transport: string; responsable: string }>({ nom: "", type_transport: TYPES_TRANSPORT[0], responsable: "none" });
 
   const load = async () => {
-    // Liste des responsables = utilisateurs ayant le rôle responsable_flotte (ou plant_manager / manager_logistique)
+    // Liste des responsables = uniquement les utilisateurs ayant le rôle responsable_flotte
     const { data: roleRows } = await supabase
       .from("user_roles")
       .select("user_id, role")
-      .in("role", ["responsable_flotte", "plant_manager", "manager_logistique"]);
+      .eq("role", "responsable_flotte");
     const respIds = (roleRows || []).map((r: any) => r.user_id);
 
     const [{ data: f }, { data: p }] = await Promise.all([

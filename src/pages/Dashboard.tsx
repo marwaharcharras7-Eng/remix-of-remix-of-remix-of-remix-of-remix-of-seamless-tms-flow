@@ -47,51 +47,190 @@ export default function Dashboard() {
 }
 
 /* =========================================================
-   ADMIN IT — uniquement la gestion des utilisateurs
+   ADMIN IT — gestion des utilisateurs & supervision IT
    ========================================================= */
 function AdminITDashboard() {
-  const [stats, setStats] = useState({ users: 0, byRole: [] as { name: string; value: number }[] });
+  const [stats, setStats] = useState({
+    users: 0,
+    activeUsers: 0,
+    inactiveUsers: 0,
+    rolesDistinct: 0,
+    respFlotteCount: 0,
+    respFlotteAssigned: 0,
+    chauffeursLies: 0,
+    flottesTotal: 0,
+    byRole: [] as { name: string; value: number }[],
+    recentUsers: [] as any[],
+    signupsByDay: [] as { date: string; count: number }[],
+  });
+
   useEffect(() => {
     (async () => {
-      const [{ data: profiles }, { data: rolesRows }] = await Promise.all([
-        supabase.from("profiles").select("id"),
-        supabase.from("user_roles").select("role"),
+      const [
+        { data: profiles },
+        { data: rolesRows },
+        { data: rff },
+        { data: flottes },
+        { data: chauffeurs },
+      ] = await Promise.all([
+        supabase.from("profiles").select("*").order("created_at", { ascending: false }),
+        supabase.from("user_roles").select("user_id, role"),
+        supabase.from("responsable_flotte_flottes").select("user_id, flotte_id"),
+        supabase.from("flottes").select("id"),
+        supabase.from("chauffeurs").select("user_id"),
       ]);
+
+      // Comptage par rôle
       const counts: Record<string, number> = {};
       (rolesRows || []).forEach((r: any) => { counts[r.role] = (counts[r.role] || 0) + 1; });
+
+      // Utilisateurs avec/sans rôle
+      const userIdsWithRole = new Set((rolesRows || []).map((r: any) => r.user_id));
+      const activeUsers = (profiles || []).filter((p: any) => userIdsWithRole.has(p.user_id)).length;
+
+      // Responsables flotte avec assignation
+      const respFlotteIds = new Set((rolesRows || []).filter((r: any) => r.role === "responsable_flotte").map((r: any) => r.user_id));
+      const respWithFlottes = new Set((rff || []).map((r: any) => r.user_id));
+      const respFlotteAssigned = [...respFlotteIds].filter((id) => respWithFlottes.has(id)).length;
+
+      // Chauffeurs liés à un user
+      const chauffeursLies = (chauffeurs || []).filter((c: any) => c.user_id).length;
+
+      // Inscriptions sur 7 jours
+      const days: Record<string, { date: string; count: number }> = {};
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(Date.now() - i * 86400000);
+        const k = d.toISOString().slice(0, 10);
+        days[k] = { date: d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" }), count: 0 };
+      }
+      (profiles || []).forEach((p: any) => {
+        const k = p.created_at?.slice(0, 10);
+        if (k && days[k]) days[k].count++;
+      });
+
+      // Derniers comptes (5)
+      const recentUsers = (profiles || []).slice(0, 5).map((p: any) => ({
+        ...p,
+        roles: (rolesRows || []).filter((r: any) => r.user_id === p.user_id).map((r: any) => r.role),
+      }));
+
       setStats({
         users: profiles?.length || 0,
+        activeUsers,
+        inactiveUsers: (profiles?.length || 0) - activeUsers,
+        rolesDistinct: Object.keys(counts).length,
+        respFlotteCount: respFlotteIds.size,
+        respFlotteAssigned,
+        chauffeursLies,
+        flottesTotal: flottes?.length || 0,
         byRole: Object.entries(counts).map(([name, value]) => ({ name: ROLE_LABELS[name as AppRole] || name, value })),
+        recentUsers,
+        signupsByDay: Object.values(days),
       });
     })();
   }, []);
+
   return (
     <>
-      <div className="grid gap-4 md:grid-cols-3">
-        <KpiCard label="Utilisateurs" value={stats.users} icon={UserCog} tone="primary" />
-        <KpiCard label="Rôles distincts" value={stats.byRole.length} icon={ShieldCheck} tone="info" />
-        <KpiCard label="Mode" value="Lecture seule métier" icon={Activity} tone="warning" />
+      <div className="rounded-md border border-info/30 bg-info/5 p-3 text-xs">
+        🔐 <strong>Espace Admin IT</strong> — Vous supervisez les comptes, les rôles et les accès. Vous n'avez pas de droits métier (lecture seule).
       </div>
-      <Card className="p-5">
-        <h3 className="mb-4 font-semibold">Répartition des utilisateurs par rôle</h3>
-        {stats.byRole.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Aucun utilisateur.</p>
-        ) : (
+
+      {/* KPIs principaux IT */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Utilisateurs total" value={stats.users} icon={UserCog} tone="primary" />
+        <KpiCard label="Comptes actifs" value={stats.activeUsers} icon={ShieldCheck} tone="success" delta={`${stats.inactiveUsers} sans rôle`} />
+        <KpiCard label="Rôles distincts" value={`${stats.rolesDistinct} / 6`} icon={Activity} tone="info" />
+        <KpiCard label="Resp. flotte assignés" value={`${stats.respFlotteAssigned} / ${stats.respFlotteCount}`} icon={Building2} tone={stats.respFlotteAssigned < stats.respFlotteCount ? "warning" : "success"} />
+      </div>
+
+      {/* KPIs secondaires */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Flottes configurées" value={stats.flottesTotal} icon={Building2} tone="info" />
+        <KpiCard label="Chauffeurs liés à un compte" value={stats.chauffeursLies} icon={Users} tone="success" />
+        <KpiCard label="Modules sécurisés (RLS)" value="13" icon={ShieldCheck} tone="success" />
+        <KpiCard label="Politiques d'accès" value="50+" icon={Activity} tone="primary" />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        {/* Répartition par rôle */}
+        <Card className="p-5 lg:col-span-2">
+          <h3 className="mb-4 font-semibold">Répartition des utilisateurs par rôle</h3>
+          {stats.byRole.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Aucun utilisateur.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={280}>
+              <PieChart>
+                <Pie data={stats.byRole} cx="50%" cy="50%" outerRadius={90} dataKey="value" label={(e) => `${e.name}: ${e.value}`}>
+                  {stats.byRole.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </Card>
+
+        {/* Inscriptions 7j */}
+        <Card className="p-5">
+          <h3 className="mb-4 font-semibold">Inscriptions — 7 derniers jours</h3>
           <ResponsiveContainer width="100%" height={280}>
-            <PieChart>
-              <Pie data={stats.byRole} cx="50%" cy="50%" outerRadius={90} dataKey="value" label={(e) => `${e.name}: ${e.value}`}>
-                {stats.byRole.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-              </Pie>
+            <LineChart data={stats.signupsByDay}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={10} />
+              <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} allowDecimals={false} />
               <Tooltip />
-            </PieChart>
+              <Line type="monotone" dataKey="count" name="Nouveaux comptes" stroke="hsl(var(--primary))" strokeWidth={2} />
+            </LineChart>
           </ResponsiveContainer>
-        )}
-      </Card>
+        </Card>
+      </div>
+
+      {/* Derniers comptes créés */}
       <Card className="p-5">
-        <p className="text-sm">
-          🔐 En tant qu'<strong>Admin IT</strong>, vous gérez exclusivement les utilisateurs et leurs rôles.
-        </p>
-        <Button asChild className="mt-3"><Link to="/utilisateurs">Aller à Utilisateurs</Link></Button>
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="font-semibold">Derniers comptes créés</h3>
+          <Button asChild variant="outline" size="sm"><Link to="/utilisateurs">Gérer les utilisateurs</Link></Button>
+        </div>
+        <table className="w-full text-sm data-table">
+          <thead><tr className="border-b border-border">
+            <th className="px-3 py-2 text-left">Nom</th>
+            <th className="px-3 py-2 text-left">Email</th>
+            <th className="px-3 py-2 text-left">Rôle(s)</th>
+            <th className="px-3 py-2 text-left">Créé le</th>
+          </tr></thead>
+          <tbody>
+            {stats.recentUsers.length === 0 ? (
+              <tr><td colSpan={4} className="py-6 text-center text-muted-foreground">Aucun compte récent.</td></tr>
+            ) : stats.recentUsers.map((u: any) => (
+              <tr key={u.id} className="border-b border-border last:border-0">
+                <td className="px-3 py-2 font-medium">{u.prenom} {u.nom}</td>
+                <td className="px-3 py-2 text-muted-foreground">{u.email}</td>
+                <td className="px-3 py-2">
+                  {u.roles.length === 0
+                    ? <span className="text-xs text-warning">Aucun rôle</span>
+                    : u.roles.map((r: AppRole) => (
+                      <span key={r} className="mr-1 inline-block rounded-md border border-primary/30 bg-primary/10 px-2 py-0.5 text-xs text-primary">
+                        {ROLE_LABELS[r]}
+                      </span>
+                    ))}
+                </td>
+                <td className="px-3 py-2 text-xs text-muted-foreground">
+                  {u.created_at ? new Date(u.created_at).toLocaleDateString("fr-FR") : "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
+
+      {/* Actions rapides IT */}
+      <Card className="p-5">
+        <h3 className="font-semibold">Actions rapides</h3>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button asChild><Link to="/utilisateurs"><UserCog className="mr-2 h-4 w-4" />Gérer les utilisateurs & rôles</Link></Button>
+          <Button asChild variant="outline"><Link to="/flottes">Voir les flottes</Link></Button>
+          <Button asChild variant="outline"><Link to="/chauffeurs">Voir les chauffeurs</Link></Button>
+        </div>
       </Card>
     </>
   );
