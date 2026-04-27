@@ -14,7 +14,7 @@ import { toast } from "sonner";
 
 export default function Chauffeurs() {
   const { hasRole } = useAuth();
-  const canEdit = hasRole("administrateur") || hasRole("planificateur");
+  const canEdit = hasRole("plant_manager") || hasRole("planificateur");
   const [items, setItems] = useState<any[]>([]);
   const [flottes, setFlottes] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
@@ -110,7 +110,7 @@ export default function Chauffeurs() {
                   {canEdit && (
                     <td className="px-4 py-3 text-right">
                       <Button size="icon" variant="ghost" onClick={() => openEdit(c)}><Pencil className="h-4 w-4" /></Button>
-                      {hasRole("administrateur") && <Button size="icon" variant="ghost" onClick={() => remove(c.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>}
+                      {hasRole("plant_manager") && <Button size="icon" variant="ghost" onClick={() => remove(c.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>}
                     </td>
                   )}
                 </tr>

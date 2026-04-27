@@ -11,7 +11,7 @@ import jsPDF from "jspdf";
 
 export default function Factures() {
   const { hasRole } = useAuth();
-  const canEdit = hasRole("administrateur") || hasRole("comptable");
+  const canEdit = hasRole("plant_manager") || hasRole("manager_logistique");
   const [items, setItems] = useState<any[]>([]);
 
   const load = async () => {

@@ -24,7 +24,7 @@ const ALGORITHMES = [
 
 export default function Plannings() {
   const { hasRole } = useAuth();
-  const canEdit = hasRole("administrateur") || hasRole("planificateur");
+  const canEdit = hasRole("plant_manager") || hasRole("planificateur");
   const [items, setItems] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);

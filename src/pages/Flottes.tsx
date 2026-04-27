@@ -17,7 +17,7 @@ interface Profile { user_id: string; nom: string; prenom: string; }
 
 export default function Flottes() {
   const { hasRole } = useAuth();
-  const canEdit = hasRole("administrateur");
+  const canEdit = hasRole("plant_manager");
   const [items, setItems] = useState<Flotte[]>([]);
   const [responsables, setResponsables] = useState<Profile[]>([]);
   const [open, setOpen] = useState(false);

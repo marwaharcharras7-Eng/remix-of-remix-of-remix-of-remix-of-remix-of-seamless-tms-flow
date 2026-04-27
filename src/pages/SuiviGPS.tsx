@@ -34,7 +34,7 @@ export default function SuiviGPS() {
     let q = supabase.from("missions").select("id, reference, origine, destination, vehicule_id, chauffeur_id, chauffeurs(user_id)").in("statut", ["affectee", "en_cours"]);
     const { data } = await q;
     let filtered = data || [];
-    if (hasRole("chauffeur") && !hasRole("administrateur") && !hasRole("planificateur")) {
+    if (hasRole("chauffeur") && !hasRole("plant_manager") && !hasRole("planificateur")) {
       filtered = filtered.filter((m: any) => m.chauffeurs?.user_id === user?.id);
     }
     setMissions(filtered);

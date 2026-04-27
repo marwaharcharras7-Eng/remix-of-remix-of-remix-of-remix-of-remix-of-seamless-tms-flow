@@ -16,7 +16,7 @@ import { generateRef, TYPES_VEHICULE, REGIONS_MAROC } from "@/lib/tms-types";
 
 export default function MisesADisposition() {
   const { hasRole, user } = useAuth();
-  const canEdit = hasRole("administrateur") || hasRole("planificateur");
+  const canEdit = hasRole("plant_manager") || hasRole("planificateur");
   const [items, setItems] = useState<any[]>([]);
   const [plannings, setPlannings] = useState<any[]>([]);
   const [prestataires, setPrestataires] = useState<any[]>([]);
