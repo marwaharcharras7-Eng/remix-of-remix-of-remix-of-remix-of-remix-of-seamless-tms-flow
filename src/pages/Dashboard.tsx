@@ -474,43 +474,181 @@ function RespFlotteDashboard({ userId }: { userId?: string }) {
    CHAUFFEUR — ses missions
    ========================================================= */
 function ChauffeurDashboard({ userId }: { userId?: string }) {
-  const [stats, setStats] = useState({ enCours: 0, terminees: 0, prochaine: null as any });
+  const [data, setData] = useState<any>({
+    chauffeur: null, enCours: 0, terminees: 0, totalMissions: 0,
+    prochaine: null, recentes: [] as any[], incidents: 0,
+    activityByDay: [] as any[], kmMois: 0, missionsMois: 0,
+  });
+
   useEffect(() => {
     if (!userId) return;
     (async () => {
-      const { data: ch } = await supabase.from("chauffeurs").select("id").eq("user_id", userId).maybeSingle();
-      if (!ch) return;
-      const [{ data: enCours }, { count: term }, { data: nextMis }] = await Promise.all([
+      const { data: ch } = await supabase
+        .from("chauffeurs")
+        .select("id, nom, prenom, taux_performance, km_parcourus_total, consommation_moyenne, type_permis, disponibilite")
+        .eq("user_id", userId).maybeSingle();
+      if (!ch) { setData((d: any) => ({ ...d, chauffeur: null })); return; }
+
+      const since30 = new Date(Date.now() - 30 * 86400000).toISOString();
+
+      const [
+        { data: enCours },
+        { count: term },
+        { count: total },
+        { data: nextMis },
+        { data: recentes },
+        { data: incidentsRows },
+        { data: missionsMois },
+      ] = await Promise.all([
         supabase.from("missions").select("id").eq("chauffeur_id", ch.id).in("statut", ["affectee","en_cours"]),
-        supabase.from("missions").select("*", { count: "exact", head: true }).eq("chauffeur_id", ch.id).in("statut", ["livree","cloturee"]),
-        supabase.from("missions").select("*").eq("chauffeur_id", ch.id).eq("statut", "affectee").order("date_debut_prevue").limit(1),
+        supabase.from("missions").select("*", { count: "exact", head: true }).eq("chauffeur_id", ch.id).in("statut", ["livree","cloturee","facturee"]),
+        supabase.from("missions").select("*", { count: "exact", head: true }).eq("chauffeur_id", ch.id),
+        supabase.from("missions").select("*").eq("chauffeur_id", ch.id).in("statut", ["affectee","en_cours"]).order("date_debut_prevue").limit(1),
+        supabase.from("missions").select("id, reference, origine, destination, statut, date_debut_prevue").eq("chauffeur_id", ch.id).order("date_debut_prevue", { ascending: false }).limit(5),
+        supabase.from("incidents").select("id, mission_id, missions!inner(chauffeur_id)").eq("missions.chauffeur_id", ch.id),
+        supabase.from("missions").select("id, km_reels, date_debut_prevue, statut").eq("chauffeur_id", ch.id).gte("date_debut_prevue", since30),
       ]);
-      setStats({
+
+      // Activité 7 derniers jours
+      const days: Record<string, { date: string; missions: number }> = {};
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(Date.now() - i * 86400000);
+        const k = d.toISOString().slice(0, 10);
+        days[k] = { date: d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" }), missions: 0 };
+      }
+      (missionsMois || []).forEach((m: any) => {
+        const k = m.date_debut_prevue?.slice(0, 10);
+        if (k && days[k]) days[k].missions++;
+      });
+
+      const kmMois = (missionsMois || []).reduce((s: number, m: any) => s + (Number(m.km_reels) || 0), 0);
+
+      setData({
+        chauffeur: ch,
         enCours: enCours?.length || 0,
         terminees: term ?? 0,
+        totalMissions: total ?? 0,
         prochaine: nextMis?.[0] || null,
+        recentes: recentes || [],
+        incidents: incidentsRows?.length || 0,
+        activityByDay: Object.values(days),
+        kmMois,
+        missionsMois: (missionsMois || []).length,
       });
     })();
   }, [userId]);
+
+  const ch = data.chauffeur;
+  if (!ch) {
+    return (
+      <div className="rounded-md border border-warning/30 bg-warning/5 p-4 text-sm">
+        ⚠️ Aucun profil chauffeur lié à votre compte. Contactez le manager logistique.
+      </div>
+    );
+  }
+
+  const perfTone: "success" | "warning" | "destructive" =
+    ch.taux_performance >= 85 ? "success" : ch.taux_performance >= 65 ? "warning" : "destructive";
+
   return (
     <>
-      <div className="grid gap-4 md:grid-cols-3">
-        <KpiCard label="Missions en cours" value={stats.enCours} icon={Route} tone="accent" />
-        <KpiCard label="Missions terminées" value={stats.terminees} icon={Truck} tone="success" />
-        <KpiCard label="Prochaine mission" value={stats.prochaine ? new Date(stats.prochaine.date_debut_prevue).toLocaleDateString("fr-FR") : "—"} icon={MapPin} tone="info" />
+      <div className="rounded-md border border-info/30 bg-info/5 p-3 text-xs">
+        🚛 Bonjour <strong>{ch.prenom} {ch.nom}</strong> — Permis {ch.type_permis} ·{" "}
+        {ch.disponibilite ? <span className="text-success">Disponible</span> : <span className="text-warning">Indisponible</span>}
       </div>
-      {stats.prochaine && (
-        <Card className="p-5">
-          <h3 className="font-semibold">🚛 Prochaine mission</h3>
-          <p className="mt-2 text-sm">
-            <span className="font-mono">{stats.prochaine.reference}</span> — {stats.prochaine.origine} → {stats.prochaine.destination}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Départ prévu : {new Date(stats.prochaine.date_debut_prevue).toLocaleString("fr-FR")}
-          </p>
-          <Button asChild className="mt-3"><Link to="/mes-missions">Voir mes missions</Link></Button>
+
+      {/* KPIs principaux */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Missions en cours" value={data.enCours} icon={Route} tone="accent" />
+        <KpiCard label="Missions terminées" value={data.terminees} icon={Truck} tone="success" delta={`${data.totalMissions} au total`} />
+        <KpiCard label="Km parcourus (total)" value={Math.round(Number(ch.km_parcourus_total) || 0).toLocaleString("fr-FR") + " km"} icon={MapPin} tone="primary" />
+        <KpiCard label="Performance" value={`${Math.round(Number(ch.taux_performance) || 0)} / 100`} icon={Activity} tone={perfTone} />
+      </div>
+
+      {/* KPIs secondaires */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Missions (30j)" value={data.missionsMois} icon={Route} tone="info" />
+        <KpiCard label="Km (30j)" value={Math.round(data.kmMois).toLocaleString("fr-FR") + " km"} icon={MapPin} tone="info" />
+        <KpiCard label="Conso. moyenne" value={`${Number(ch.consommation_moyenne || 0).toFixed(1)} L/100km`} icon={Fuel} tone="warning" />
+        <KpiCard label="Incidents déclarés" value={data.incidents} icon={AlertTriangle} tone={data.incidents > 0 ? "warning" : "success"} />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        {/* Activité */}
+        <Card className="p-5 lg:col-span-2">
+          <h3 className="mb-4 font-semibold">Mon activité — 7 derniers jours</h3>
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={data.activityByDay}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+              <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} allowDecimals={false} />
+              <Tooltip />
+              <Line type="monotone" dataKey="missions" name="Missions" stroke="hsl(var(--accent))" strokeWidth={2} />
+            </LineChart>
+          </ResponsiveContainer>
         </Card>
-      )}
+
+        {/* Prochaine mission */}
+        <Card className="p-5">
+          <h3 className="mb-3 font-semibold">🚛 Prochaine mission</h3>
+          {data.prochaine ? (
+            <div className="space-y-2 text-sm">
+              <p className="font-mono text-xs text-muted-foreground">{data.prochaine.reference}</p>
+              <p className="font-medium">{data.prochaine.origine} → {data.prochaine.destination}</p>
+              <p className="text-xs text-muted-foreground">
+                Départ : {new Date(data.prochaine.date_debut_prevue).toLocaleString("fr-FR")}
+              </p>
+              <StatusBadge status={data.prochaine.statut} />
+              <Button asChild size="sm" className="mt-3 w-full">
+                <Link to="/mes-missions">Voir mes missions</Link>
+              </Button>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Aucune mission à venir.</p>
+          )}
+        </Card>
+      </div>
+
+      {/* Missions récentes */}
+      <Card className="p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="font-semibold">Mes dernières missions</h3>
+          <Button asChild variant="outline" size="sm"><Link to="/mes-missions">Voir tout</Link></Button>
+        </div>
+        <table className="w-full text-sm data-table">
+          <thead><tr className="border-b border-border">
+            <th className="px-3 py-2 text-left">Réf.</th>
+            <th className="px-3 py-2 text-left">Trajet</th>
+            <th className="px-3 py-2 text-left">Date</th>
+            <th className="px-3 py-2 text-left">Statut</th>
+          </tr></thead>
+          <tbody>
+            {data.recentes.length === 0 ? (
+              <tr><td colSpan={4} className="py-6 text-center text-muted-foreground">Aucune mission.</td></tr>
+            ) : data.recentes.map((m: any) => (
+              <tr key={m.id} className="border-b border-border last:border-0">
+                <td className="px-3 py-2 font-mono text-xs">{m.reference}</td>
+                <td className="px-3 py-2">{m.origine} → {m.destination}</td>
+                <td className="px-3 py-2 text-xs text-muted-foreground">
+                  {m.date_debut_prevue ? new Date(m.date_debut_prevue).toLocaleDateString("fr-FR") : "—"}
+                </td>
+                <td className="px-3 py-2"><StatusBadge status={m.statut} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
+
+      {/* Actions rapides */}
+      <Card className="p-5">
+        <h3 className="font-semibold">Actions rapides</h3>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button asChild><Link to="/mes-missions">Mes missions</Link></Button>
+          <Button asChild variant="outline"><Link to="/suivi-gps">Suivi GPS</Link></Button>
+          <Button asChild variant="outline"><Link to="/pont-bascule">Pont bascule</Link></Button>
+          <Button asChild variant="outline"><Link to="/incidents">Déclarer un incident</Link></Button>
+        </div>
+      </Card>
     </>
   );
 }
