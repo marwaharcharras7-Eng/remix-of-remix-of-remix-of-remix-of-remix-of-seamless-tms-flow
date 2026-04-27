@@ -1,29 +1,71 @@
-export type AppRole = 'administrateur' | 'planificateur' | 'chauffeur' | 'comptable' | 'direction';
+export type AppRole =
+  | 'admin_it'
+  | 'plant_manager'
+  | 'manager_logistique'
+  | 'responsable_flotte'
+  | 'planificateur'
+  | 'chauffeur';
 
 export const ROLE_LABELS: Record<AppRole, string> = {
-  administrateur: 'Administrateur',
+  admin_it: 'Admin IT',
+  plant_manager: 'Plant Manager (Directeur d\'usine)',
+  manager_logistique: 'Manager Logistique',
+  responsable_flotte: 'Responsable de flotte',
   planificateur: 'Planificateur',
   chauffeur: 'Chauffeur / Opérateur',
-  comptable: 'Comptable / Financier',
-  direction: 'Direction / Logistique',
 };
 
 export const ROLE_DESCRIPTIONS: Record<AppRole, string> = {
-  administrateur: 'Tout accès — utilisateurs, flotte, paramétrage',
-  planificateur: 'Création, modification, validation des plannings',
-  chauffeur: 'Consultation missions, saisie GPS, livraisons',
-  comptable: 'Données financières, validation factures',
-  direction: 'Consultation globale, KPI, tableaux de bord',
+  admin_it: 'Gestion des utilisateurs et de leurs rôles. Lecture seule sur le métier.',
+  plant_manager: 'Tous les droits métier sauf modification des plannings et des chauffeurs. Gère aussi les utilisateurs.',
+  manager_logistique: 'Tous les droits métier (y compris plannings et chauffeurs). Gère aussi les utilisateurs.',
+  responsable_flotte: 'Ne modifie que les véhicules, chauffeurs et incidents de SES flottes assignées.',
+  planificateur: 'Création, modification, validation des plannings, MAD, missions.',
+  chauffeur: 'Consultation de ses missions, saisie GPS, livraisons, déclaration d\'incidents.',
 };
 
 // Permissions par module (UI guard)
+// Note: les RLS de la base font foi côté sécurité ; ces listes contrôlent l'affichage des menus.
 export const ROLE_PERMS: Record<AppRole, string[]> = {
-  administrateur: ['dashboard','flotte','vehicules','chauffeurs','prestataires','planning','mises-a-disposition','missions','suivi-gps','pont-bascule','factures','utilisateurs','reporting','incidents'],
-  planificateur:  ['dashboard','flotte','vehicules','chauffeurs','prestataires','planning','mises-a-disposition','missions','suivi-gps','pont-bascule','reporting','incidents'],
-  chauffeur:      ['dashboard','mes-missions','suivi-gps','pont-bascule','incidents'],
-  comptable:      ['dashboard','factures','missions','reporting'],
-  direction:      ['dashboard','reporting','flotte','vehicules','chauffeurs','missions','factures','incidents'],
+  // Admin IT : uniquement les utilisateurs + lecture seule sur quelques modules clés
+  admin_it: ['dashboard', 'utilisateurs', 'flotte', 'vehicules', 'chauffeurs', 'missions'],
+
+  // Plant Manager : tout sauf édition planning/chauffeurs (l'UI désactive l'édition, RLS aussi)
+  plant_manager: ['dashboard','flotte','vehicules','chauffeurs','prestataires','planning','mises-a-disposition','missions','suivi-gps','pont-bascule','factures','utilisateurs','reporting','incidents'],
+
+  // Manager Logistique : tout, y compris planning et chauffeurs en édition
+  manager_logistique: ['dashboard','flotte','vehicules','chauffeurs','prestataires','planning','mises-a-disposition','missions','suivi-gps','pont-bascule','factures','utilisateurs','reporting','incidents'],
+
+  // Responsable de flotte : voit le métier mais filtré sur ses flottes
+  responsable_flotte: ['dashboard','flotte','vehicules','chauffeurs','missions','suivi-gps','pont-bascule','incidents','reporting'],
+
+  // Planificateur : inchangé
+  planificateur: ['dashboard','flotte','vehicules','chauffeurs','prestataires','planning','mises-a-disposition','missions','suivi-gps','pont-bascule','reporting','incidents'],
+
+  // Chauffeur : ses missions seulement
+  chauffeur: ['dashboard','mes-missions','suivi-gps','pont-bascule','incidents'],
 };
+
+// Helpers permissions métier
+export const canEditPlanning = (roles: AppRole[]) =>
+  roles.some(r => r === 'manager_logistique' || r === 'planificateur');
+
+export const canEditChauffeur = (roles: AppRole[]) =>
+  roles.some(r => r === 'manager_logistique' || r === 'planificateur' || r === 'responsable_flotte');
+
+export const canEditFlotte = (roles: AppRole[]) =>
+  roles.some(r => r === 'plant_manager' || r === 'manager_logistique');
+
+export const canManageUsers = (roles: AppRole[]) =>
+  roles.some(r => r === 'admin_it' || r === 'plant_manager' || r === 'manager_logistique');
+
+export const canEditFactures = (roles: AppRole[]) =>
+  roles.some(r => r === 'plant_manager' || r === 'manager_logistique');
+
+export const isFleetScoped = (roles: AppRole[]) =>
+  roles.includes('responsable_flotte') && !roles.some(r =>
+    r === 'admin_it' || r === 'plant_manager' || r === 'manager_logistique' || r === 'planificateur'
+  );
 
 export const VEHICULE_STATUTS = ['disponible','affecte','en_mission','maintenance','retire'] as const;
 export const MISSION_STATUTS = ['creee','affectee','en_cours','livree','facturee','cloturee','annulee'] as const;
@@ -31,85 +73,36 @@ export const MAD_STATUTS = ['creee','validee','affectee','en_cours','terminee','
 
 // ===== Listes déroulantes (référentiels) =====
 export const TYPES_TRANSPORT = [
-  'Routier longue distance',
-  'Routier régional',
-  'Distribution urbaine',
-  'Frigorifique',
-  'Citerne / Vrac liquide',
-  'Benne / Vrac solide',
-  'Conteneur',
-  'Maritime',
-  'Multimodal',
+  'Routier longue distance','Routier régional','Distribution urbaine','Frigorifique',
+  'Citerne / Vrac liquide','Benne / Vrac solide','Conteneur','Maritime','Multimodal',
 ] as const;
 
 export const TYPES_VEHICULE = [
-  'Camion 19T',
-  'Camion 26T',
-  'Tracteur + Semi-remorque',
-  'Porteur 12T',
-  'Camionnette 3.5T',
-  'Fourgon',
-  'Frigorifique',
-  'Citerne',
-  'Benne',
-  'Plateau',
-  'Porte-conteneur',
+  'Camion 19T','Camion 26T','Tracteur + Semi-remorque','Porteur 12T','Camionnette 3.5T',
+  'Fourgon','Frigorifique','Citerne','Benne','Plateau','Porte-conteneur',
 ] as const;
 
 export const TYPES_INCIDENT = [
-  'Retard livraison',
-  'Panne mécanique',
-  'Accident',
-  'Vol / Disparition',
-  'Marchandise endommagée',
-  'Écart de poids',
-  'Refus de livraison',
-  'Document manquant',
-  'Problème client',
-  'Conditions météo',
-  'Itinéraire bloqué',
-  'Autre',
+  'Retard livraison','Panne mécanique','Accident','Vol / Disparition','Marchandise endommagée',
+  'Écart de poids','Refus de livraison','Document manquant','Problème client','Conditions météo',
+  'Itinéraire bloqué','Autre',
 ] as const;
 
-// 12 régions administratives du Maroc
 export const REGIONS_MAROC = [
-  'Tanger-Tétouan-Al Hoceïma',
-  'Oriental',
-  'Fès-Meknès',
-  'Rabat-Salé-Kénitra',
-  'Béni Mellal-Khénifra',
-  'Casablanca-Settat',
-  'Marrakech-Safi',
-  'Drâa-Tafilalet',
-  'Souss-Massa',
-  'Guelmim-Oued Noun',
-  'Laâyoune-Sakia El Hamra',
-  'Dakhla-Oued Ed-Dahab',
+  'Tanger-Tétouan-Al Hoceïma','Oriental','Fès-Meknès','Rabat-Salé-Kénitra',
+  'Béni Mellal-Khénifra','Casablanca-Settat','Marrakech-Safi','Drâa-Tafilalet',
+  'Souss-Massa','Guelmim-Oued Noun','Laâyoune-Sakia El Hamra','Dakhla-Oued Ed-Dahab',
 ] as const;
 
 export const STATUT_LABELS: Record<string, string> = {
-  disponible: 'Disponible',
-  affecte: 'Affecté',
-  en_mission: 'En mission',
-  maintenance: 'Maintenance',
-  retire: 'Retiré',
-  creee: 'Créée',
-  validee: 'Validée',
-  affectee: 'Affectée',
-  en_cours: 'En cours',
-  livree: 'Livrée',
-  facturee: 'Facturée',
-  cloturee: 'Clôturée',
-  annulee: 'Annulée',
-  terminee: 'Terminée',
-  brouillon: 'Brouillon',
-  envoyee: 'Envoyée',
-  payee: 'Payée',
-  interne: 'Interne',
-  externe: 'Externe',
-  mineur: 'Mineur',
-  majeur: 'Majeur',
-  critique: 'Critique',
+  disponible: 'Disponible', affecte: 'Affecté', en_mission: 'En mission',
+  maintenance: 'Maintenance', retire: 'Retiré',
+  creee: 'Créée', validee: 'Validée', affectee: 'Affectée',
+  en_cours: 'En cours', livree: 'Livrée', facturee: 'Facturée',
+  cloturee: 'Clôturée', annulee: 'Annulée', terminee: 'Terminée',
+  brouillon: 'Brouillon', envoyee: 'Envoyée', payee: 'Payée',
+  interne: 'Interne', externe: 'Externe',
+  mineur: 'Mineur', majeur: 'Majeur', critique: 'Critique',
 };
 
 export function statutColor(statut: string): string {
