@@ -547,8 +547,8 @@ function ChauffeurDashboard({ userId }: { userId?: string }) {
     );
   }
 
-  const perfTone: "success" | "warning" | "destructive" =
-    ch.taux_performance >= 85 ? "success" : ch.taux_performance >= 65 ? "warning" : "destructive";
+  const perfTone: "success" | "warning" | "accent" =
+    ch.taux_performance >= 85 ? "success" : ch.taux_performance >= 65 ? "warning" : "accent";
 
   return (
     <>
