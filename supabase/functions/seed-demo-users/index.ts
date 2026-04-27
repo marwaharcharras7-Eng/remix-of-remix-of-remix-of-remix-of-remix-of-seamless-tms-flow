@@ -6,11 +6,12 @@ const corsHeaders = {
 };
 
 const DEMO_USERS = [
-  { email: "admin@tms.demo",      password: "Demo1234!", nom: "Admin",       prenom: "TMS",       role: "administrateur" },
-  { email: "planif@tms.demo",     password: "Demo1234!", nom: "Planificateur", prenom: "Demo",    role: "planificateur" },
-  { email: "chauffeur@tms.demo",  password: "Demo1234!", nom: "Chauffeur",   prenom: "Demo",      role: "chauffeur" },
-  { email: "compta@tms.demo",     password: "Demo1234!", nom: "Comptable",   prenom: "Demo",      role: "comptable" },
-  { email: "direction@tms.demo",  password: "Demo1234!", nom: "Direction",   prenom: "Demo",      role: "direction" },
+  { email: "admin@tms.demo",       password: "Demo1234!", nom: "Admin IT",        prenom: "Demo", role: "admin_it" },
+  { email: "plant@tms.demo",       password: "Demo1234!", nom: "Plant Manager",   prenom: "Demo", role: "plant_manager" },
+  { email: "logistique@tms.demo",  password: "Demo1234!", nom: "Manager Log.",    prenom: "Demo", role: "manager_logistique" },
+  { email: "respflotte@tms.demo",  password: "Demo1234!", nom: "Resp. Flotte",    prenom: "Demo", role: "responsable_flotte" },
+  { email: "planif@tms.demo",      password: "Demo1234!", nom: "Planificateur",   prenom: "Demo", role: "planificateur" },
+  { email: "chauffeur@tms.demo",   password: "Demo1234!", nom: "Chauffeur",       prenom: "Demo", role: "chauffeur" },
 ];
 
 Deno.serve(async (req) => {
@@ -24,7 +25,6 @@ Deno.serve(async (req) => {
     const results: any[] = [];
 
     for (const u of DEMO_USERS) {
-      // Try create user (auto-confirmed). If it already exists, fetch and ensure role.
       const { data: created, error: createErr } = await admin.auth.admin.createUser({
         email: u.email,
         password: u.password,
@@ -36,7 +36,6 @@ Deno.serve(async (req) => {
       let status = "created";
 
       if (createErr) {
-        // User probably already exists; look up by listing
         const { data: list } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
         const existing = list?.users?.find((x: any) => x.email === u.email);
         if (!existing) {
@@ -49,15 +48,24 @@ Deno.serve(async (req) => {
 
       if (!userId) continue;
 
-      // Ensure profile (trigger should have done it, but be defensive)
       await admin.from("profiles").upsert(
         { user_id: userId, nom: u.nom, prenom: u.prenom, email: u.email },
         { onConflict: "user_id" },
       );
 
-      // Reset role to the intended one
       await admin.from("user_roles").delete().eq("user_id", userId);
       const { error: roleErr } = await admin.from("user_roles").insert({ user_id: userId, role: u.role });
+
+      // Si responsable_flotte : assigner toutes les flottes existantes (pour la démo)
+      if (u.role === "responsable_flotte") {
+        await admin.from("responsable_flotte_flottes").delete().eq("user_id", userId);
+        const { data: flottes } = await admin.from("flottes").select("id");
+        if (flottes && flottes.length > 0) {
+          await admin.from("responsable_flotte_flottes").insert(
+            flottes.map((f: any) => ({ user_id: userId, flotte_id: f.id }))
+          );
+        }
+      }
 
       results.push({
         email: u.email,
