@@ -62,8 +62,8 @@ export default function Missions({ mineOnly = false }: { mineOnly?: boolean }) {
   };
 
   const isChauffeurOf = (m: any) => m.chauffeurs?.user_id === user?.id;
-  const canPlanif = hasRole("administrateur") || hasRole("planificateur");
-  const canCompta = hasRole("administrateur") || hasRole("comptable");
+  const canPlanif = hasRole("plant_manager") || hasRole("planificateur");
+  const canCompta = hasRole("plant_manager") || hasRole("manager_logistique");
 
   return (
     <div className="flex h-full flex-col">

@@ -133,11 +133,12 @@ export default function Auth() {
         <div className="mt-6 rounded-md border border-border bg-muted/40 p-3 text-xs">
           <p className="mb-2 font-semibold text-foreground">🧪 Comptes de démo (mot de passe : <code className="rounded bg-background px-1 py-0.5">Demo1234!</code>)</p>
           <ul className="space-y-0.5 text-muted-foreground">
-            <li><code>admin@tms.demo</code> — Administrateur</li>
+            <li><code>admin@tms.demo</code> — Admin IT</li>
+            <li><code>plant@tms.demo</code> — Plant Manager</li>
+            <li><code>logistique@tms.demo</code> — Manager Logistique</li>
+            <li><code>respflotte@tms.demo</code> — Responsable de flotte</li>
             <li><code>planif@tms.demo</code> — Planificateur</li>
             <li><code>chauffeur@tms.demo</code> — Chauffeur</li>
-            <li><code>compta@tms.demo</code> — Comptable</li>
-            <li><code>direction@tms.demo</code> — Direction</li>
           </ul>
           <p className="mt-2 text-[11px] text-muted-foreground">Si un compte n'existe pas encore, créez-le via "S'inscrire" en sélectionnant le rôle correspondant.</p>
           <Button onClick={seedDemo} disabled={seeding} variant="secondary" size="sm" className="mt-3 w-full">

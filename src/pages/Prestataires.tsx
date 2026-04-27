@@ -12,7 +12,7 @@ import { toast } from "sonner";
 
 export default function Prestataires() {
   const { hasRole } = useAuth();
-  const canEdit = hasRole("administrateur") || hasRole("planificateur");
+  const canEdit = hasRole("plant_manager") || hasRole("planificateur");
   const [items, setItems] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
@@ -69,7 +69,7 @@ export default function Prestataires() {
                   <td className="px-4 py-3 text-muted-foreground">{p.email || "—"}</td>
                   <td className="px-4 py-3 text-xs font-mono">{p.contrat_reference || "—"}</td>
                   <td className="px-4 py-3 text-right tabular-nums">{p.cout_horaire ? `${Number(p.cout_horaire).toFixed(2)} MAD` : "—"}</td>
-                  {canEdit && <td className="px-4 py-3 text-right"><Button size="icon" variant="ghost" onClick={() => openEdit(p)}><Pencil className="h-4 w-4" /></Button>{hasRole("administrateur") && <Button size="icon" variant="ghost" onClick={() => remove(p.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>}</td>}
+                  {canEdit && <td className="px-4 py-3 text-right"><Button size="icon" variant="ghost" onClick={() => openEdit(p)}><Pencil className="h-4 w-4" /></Button>{hasRole("plant_manager") && <Button size="icon" variant="ghost" onClick={() => remove(p.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>}</td>}
                 </tr>
               ))}
             </tbody>

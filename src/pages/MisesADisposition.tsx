@@ -16,7 +16,7 @@ import { generateRef, TYPES_VEHICULE, REGIONS_MAROC } from "@/lib/tms-types";
 
 export default function MisesADisposition() {
   const { hasRole, user } = useAuth();
-  const canEdit = hasRole("administrateur") || hasRole("planificateur");
+  const canEdit = hasRole("plant_manager") || hasRole("manager_logistique") || hasRole("planificateur");
   const [items, setItems] = useState<any[]>([]);
   const [plannings, setPlannings] = useState<any[]>([]);
   const [prestataires, setPrestataires] = useState<any[]>([]);
@@ -30,6 +30,13 @@ export default function MisesADisposition() {
     region_destination: REGIONS_MAROC[0],
     cout_estime: "0", commentaire: "",
   });
+
+  // Dialog d'affectation manuelle (chauffeur)
+  const [assignDialog, setAssignDialog] = useState<any | null>(null);
+  const [assignVehicules, setAssignVehicules] = useState<any[]>([]);
+  const [assignChauffeurs, setAssignChauffeurs] = useState<any[]>([]);
+  // Pour chaque ligne mission à créer : { vehicule_id, chauffeur_id }
+  const [assignRows, setAssignRows] = useState<{ vehicule_id: string; chauffeur_id: string }[]>([]);
 
   const load = async () => {
     const [{ data: m }, { data: pl }, { data: pr }, { data: vh }] = await Promise.all([
@@ -91,78 +98,80 @@ export default function MisesADisposition() {
     setOpen(false); load();
   };
 
-  // P3 — Génération auto des missions avec cohérence flotte/disponibilité
-  const genererMissions = async (m: any) => {
-    if (!confirm(`Générer ${m.nb_vehicules} mission(s) depuis cette MAD ?\n\nL'affectation respectera : type véhicule requis, flotte du véhicule = flotte du chauffeur, et disponibilité réelle.`)) return;
-
-    // 1) Sélectionner véhicules dispo qui correspondent au type requis
-    const { data: vehs } = await supabase
-      .from("vehicules")
-      .select("id, type_vehicule, flotte_id")
-      .eq("statut", "disponible")
-      .eq("type_vehicule", m.type_vehicule_requis)
-      .limit(m.nb_vehicules);
-
-    if (!vehs || vehs.length === 0) {
-      toast.error(`Aucun véhicule disponible de type "${m.type_vehicule_requis}". Vérifiez le module Véhicules.`);
-      return;
-    }
-
-    // 2) Pour chaque véhicule, chercher un chauffeur dispo de la même flotte
-    const missionsToInsert: any[] = [];
-    const vehiculesUtilises: string[] = [];
-    const chauffeursUtilises: string[] = [];
-    const skipChauffeurIds = new Set<string>();
-
-    for (const v of vehs) {
-      let chauffeurQuery = supabase
+  // Ouvrir le dialog d'affectation manuelle
+  const openAssignDialog = async (m: any) => {
+    // Charger véhicules dispo du bon type + chauffeurs dispo
+    const [{ data: vehs }, { data: chauffs }] = await Promise.all([
+      supabase
+        .from("vehicules")
+        .select("id, immatriculation, type_vehicule, flotte_id, flottes(nom)")
+        .eq("statut", "disponible")
+        .eq("type_vehicule", m.type_vehicule_requis),
+      supabase
         .from("chauffeurs")
-        .select("id, flotte_id, prenom, nom")
-        .eq("disponibilite", true);
-
-      // Cohérence flotte : si le véhicule a une flotte, exiger un chauffeur de cette flotte
-      if (v.flotte_id) {
-        chauffeurQuery = chauffeurQuery.eq("flotte_id", v.flotte_id);
-      }
-
-      const { data: chauffsDispo } = await chauffeurQuery;
-      const chauffeurLibre = (chauffsDispo || []).find((c) => !skipChauffeurIds.has(c.id));
-
-      if (!chauffeurLibre) continue; // Pas de chauffeur compatible : on saute ce véhicule
-
-      skipChauffeurIds.add(chauffeurLibre.id);
-      vehiculesUtilises.push(v.id);
-      chauffeursUtilises.push(chauffeurLibre.id);
-
-      missionsToInsert.push({
-        reference: generateRef("MIS"),
-        mise_a_disposition_id: m.id,
-        vehicule_id: v.id,
-        chauffeur_id: chauffeurLibre.id,
-        prestataire_id: m.prestataire_id,
-        type_prestation: m.type_prestation,
-        origine: "Dépôt principal",
-        destination: m.region_destination,
-        date_debut_prevue: m.date_debut_prevue,
-        date_fin_prevue: m.date_fin_prevue,
-        cout_estime: m.cout_estime / m.nb_vehicules,
-        statut: "affectee",
-      });
-    }
-
-    if (missionsToInsert.length === 0) {
-      toast.error("Aucun couple véhicule + chauffeur compatible trouvé (vérifiez les flottes & disponibilités).");
+        .select("id, prenom, nom, flotte_id, disponibilite, flottes(nom)")
+        .eq("disponibilite", true),
+    ]);
+    if (!vehs || vehs.length === 0) {
+      toast.error(`Aucun véhicule disponible de type "${m.type_vehicule_requis}".`);
       return;
     }
+    if (!chauffs || chauffs.length === 0) {
+      toast.error("Aucun chauffeur disponible.");
+      return;
+    }
+    setAssignDialog(m);
+    setAssignVehicules(vehs);
+    setAssignChauffeurs(chauffs);
+    // Initialiser n lignes vides selon nb_vehicules
+    setAssignRows(
+      Array.from({ length: m.nb_vehicules }, () => ({ vehicule_id: "", chauffeur_id: "" }))
+    );
+  };
+
+  // Confirmer l'affectation manuelle → créer les missions
+  const confirmAssign = async () => {
+    if (!assignDialog) return;
+    const m = assignDialog;
+
+    // Validation
+    const filled = assignRows.filter(r => r.vehicule_id && r.chauffeur_id);
+    if (filled.length === 0) {
+      toast.error("Veuillez sélectionner au moins un couple véhicule + chauffeur.");
+      return;
+    }
+    // Vérifier unicité (un véhicule ou chauffeur ne peut pas être affecté 2x)
+    const vehIds = filled.map(r => r.vehicule_id);
+    const chIds = filled.map(r => r.chauffeur_id);
+    if (new Set(vehIds).size !== vehIds.length || new Set(chIds).size !== chIds.length) {
+      toast.error("Un même véhicule ou chauffeur ne peut pas être affecté plusieurs fois.");
+      return;
+    }
+
+    const missionsToInsert = filled.map(r => ({
+      reference: generateRef("MIS"),
+      mise_a_disposition_id: m.id,
+      vehicule_id: r.vehicule_id,
+      chauffeur_id: r.chauffeur_id,
+      prestataire_id: m.prestataire_id,
+      type_prestation: m.type_prestation,
+      origine: "Dépôt principal",
+      destination: m.region_destination,
+      date_debut_prevue: m.date_debut_prevue,
+      date_fin_prevue: m.date_fin_prevue,
+      cout_estime: m.cout_estime / filled.length,
+      statut: "affectee" as const,
+    }));
 
     const { error: errMis } = await supabase.from("missions").insert(missionsToInsert);
     if (errMis) return toast.error(errMis.message);
 
-    await supabase.from("vehicules").update({ statut: "affecte" }).in("id", vehiculesUtilises);
-    await supabase.from("chauffeurs").update({ disponibilite: false }).in("id", chauffeursUtilises);
+    await supabase.from("vehicules").update({ statut: "affecte" }).in("id", vehIds);
+    await supabase.from("chauffeurs").update({ disponibilite: false }).in("id", chIds);
     await supabase.from("mises_a_disposition").update({ statut: "affectee" }).eq("id", m.id);
 
-    toast.success(`✅ ${missionsToInsert.length} mission(s) créée(s) avec affectation cohérente flotte/dispo`);
+    toast.success(`✅ ${filled.length} mission(s) créée(s) avec affectation manuelle`);
+    setAssignDialog(null);
     load();
   };
 
@@ -171,7 +180,7 @@ export default function MisesADisposition() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="Mises à disposition" description="P3 — Demandes de transport (génération auto possible)"
+      <PageHeader title="Mises à disposition" description="P3 — Demandes de transport (affectation chauffeur manuelle)"
         actions={canEdit && <Button onClick={openNew}><Plus className="mr-2 h-4 w-4" />Nouvelle MAD</Button>} />
       <div className="flex-1 p-6">
         <Card>
@@ -196,7 +205,11 @@ export default function MisesADisposition() {
                     <td className="px-4 py-3"><StatusBadge status={m.statut} /></td>
                     {canEdit && (
                       <td className="px-4 py-3 text-right">
-                        {m.statut === "creee" && <Button size="sm" onClick={() => genererMissions(m)}><Sparkles className="mr-1 h-3.5 w-3.5" />Générer missions</Button>}
+                        {m.statut === "creee" && (
+                          <Button size="sm" onClick={() => openAssignDialog(m)}>
+                            <Sparkles className="mr-1 h-3.5 w-3.5" />Affecter & générer
+                          </Button>
+                        )}
                         <Button size="icon" variant="ghost" onClick={() => openEdit(m)}><Pencil className="h-4 w-4" /></Button>
                       </td>
                     )}
@@ -208,6 +221,7 @@ export default function MisesADisposition() {
         </Card>
       </div>
 
+      {/* Dialog Création / édition MAD */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-xl">
           <DialogHeader><DialogTitle>{editing ? "Modifier MAD" : "Nouvelle mise à disposition"}</DialogTitle></DialogHeader>
@@ -269,14 +283,80 @@ export default function MisesADisposition() {
             <div className="flex gap-2 rounded-md border border-info/30 bg-info/5 p-3 text-xs">
               <Info className="mt-0.5 h-4 w-4 shrink-0 text-info" />
               <p>
-                Les véhicules spécifiques seront sélectionnés <strong>automatiquement</strong> par
-                "Générer missions" en respectant : type requis, flotte du véhicule = flotte du chauffeur, et disponibilité.
+                Après création, cliquez sur <strong>"Affecter & générer"</strong> pour choisir
+                <strong> manuellement</strong> les véhicules ET les chauffeurs à affecter.
               </p>
             </div>
             <DialogFooter><Button type="submit">{editing ? "Mettre à jour" : "Créer"}</Button></DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog Affectation manuelle */}
+      <Dialog open={!!assignDialog} onOpenChange={(o) => !o && setAssignDialog(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Affectation manuelle — MAD {assignDialog?.reference}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Sélectionnez pour chaque mission le véhicule (type : <strong>{assignDialog?.type_vehicule_requis}</strong>) et le chauffeur de votre choix.
+              {assignVehicules.length} véhicule(s) et {assignChauffeurs.length} chauffeur(s) disponibles.
+            </p>
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {assignRows.map((row, idx) => (
+                <div key={idx} className="grid grid-cols-[40px_1fr_1fr] gap-2 items-center rounded-md border border-border p-2">
+                  <span className="text-xs font-bold text-muted-foreground">#{idx + 1}</span>
+                  <Select
+                    value={row.vehicule_id}
+                    onValueChange={(v) => {
+                      const next = [...assignRows]; next[idx] = { ...next[idx], vehicule_id: v }; setAssignRows(next);
+                    }}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Véhicule" /></SelectTrigger>
+                    <SelectContent>
+                      {assignVehicules.map((v: any) => (
+                        <SelectItem key={v.id} value={v.id}>
+                          {v.immatriculation} — {v.flottes?.nom || "Sans flotte"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={row.chauffeur_id}
+                    onValueChange={(v) => {
+                      const next = [...assignRows]; next[idx] = { ...next[idx], chauffeur_id: v }; setAssignRows(next);
+                    }}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Chauffeur" /></SelectTrigger>
+                    <SelectContent>
+                      {assignChauffeurs.map((c: any) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.prenom} {c.nom} — {c.flottes?.nom || "Sans flotte"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 rounded-md border border-warning/30 bg-warning/5 p-3 text-xs">
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+              <p>
+                Conseil : choisissez de préférence un chauffeur de la même flotte que le véhicule.
+                Les missions non affectées (lignes vides) seront ignorées.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAssignDialog(null)}>Annuler</Button>
+            <Button onClick={confirmAssign}>
+              <Sparkles className="mr-1 h-3.5 w-3.5" />Créer les missions
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+

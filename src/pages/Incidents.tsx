@@ -15,7 +15,7 @@ import { TYPES_INCIDENT } from "@/lib/tms-types";
 
 export default function Incidents() {
   const { hasRole, user } = useAuth();
-  const canResolve = hasRole("administrateur") || hasRole("planificateur");
+  const canResolve = hasRole("plant_manager") || hasRole("planificateur");
   const [items, setItems] = useState<any[]>([]);
   const [missions, setMissions] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
