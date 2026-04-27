@@ -254,7 +254,11 @@ function ManagerDashboard({ variant }: { variant: "plant_manager" | "manager_log
     setKpi(k);
     const counts: Record<string, number> = {};
     (vs || []).forEach((v: any) => { counts[v.statut] = (counts[v.statut] || 0) + 1; });
-    setVehStatuts(Object.entries(counts).map(([name, value]) => ({ name, value })));
+    const STATUT_VEH_LABELS: Record<string,string> = {
+      disponible: "Disponible", affecte: "Affecté", en_mission: "En mission",
+      maintenance: "Maintenance", retire: "Retiré",
+    };
+    setVehStatuts(Object.entries(counts).map(([name, value]) => ({ name: STATUT_VEH_LABELS[name] || name, value })));
 
     const { data: m7 } = await supabase
       .from("missions").select("created_at, statut")
@@ -322,14 +326,21 @@ function ManagerDashboard({ variant }: { variant: "plant_manager" | "manager_log
         </Card>
         <Card className="p-5">
           <h3 className="mb-4 font-semibold">Statut de la flotte</h3>
-          <ResponsiveContainer width="100%" height={260}>
-            <PieChart>
-              <Pie data={vehStatuts} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={(e) => `${e.name}: ${e.value}`}>
-                {vehStatuts.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
+          {vehStatuts.length === 0 ? (
+            <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">
+              Aucun véhicule enregistré
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <PieChart>
+                <Pie data={vehStatuts} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={(e) => `${e.name}: ${e.value}`}>
+                  {vehStatuts.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                </Pie>
+                <Tooltip />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
         </Card>
       </div>
       <Card className="p-5">
